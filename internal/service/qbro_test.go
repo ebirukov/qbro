@@ -27,8 +27,8 @@ func Test_Lifecycle(t *testing.T) {
 	reg := NewQueueRegistry(appCtx, config, CreateFn(memory.Create))
 
 	defer reg.Shutdown()
-	
-	qbro := NewQBro(config, reg)
+
+	qbro := NewBrokerSvc(config, reg)
 
 	ctx, cancel := context.WithTimeout(appCtx, time.Second)
 	defer cancel()

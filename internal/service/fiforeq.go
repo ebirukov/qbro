@@ -88,7 +88,7 @@ func (co *FifoGetQueue) Get(ctx context.Context) (model.Message, error) {
 		return nil, co.appCtx.Err()
 	case co.pool <- InvokeContext{res: resp, reqctx: ctx}:
 	default:
-		return nil, ErrTooManyConnection
+		return nil, ErrTooManyRequest
 	}
 
 	select {
