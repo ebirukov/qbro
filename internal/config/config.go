@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-type Config struct {
-	QueueLimit int
+type BrokerCfg struct {
+	QueueLimit   int
 	MaxQueueSize int
 
 	DefaultTimeout time.Duration
@@ -15,7 +15,7 @@ type Config struct {
 	HttpPort int
 }
 
-func (c Config) Validate() error {
+func (c BrokerCfg) Validate() error {
 	switch {
 	case c.QueueLimit == 0:
 		return errors.New("required number of queues")
@@ -26,10 +26,6 @@ func (c Config) Validate() error {
 	}
 }
 
-func (c Config) HttpAddr() string {
-	if c.HttpPort == 0 {
-		return ":8080"
-	}
-
+func (c BrokerCfg) HttpAddr() string {
 	return fmt.Sprintf(":%d", c.HttpPort)
 }

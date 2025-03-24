@@ -4,13 +4,23 @@ import (
 	"context"
 	"ebirukov/qbro/internal/config"
 	"ebirukov/qbro/internal/model"
+	"errors"
 	"fmt"
 	"sync"
 )
 
+var ErrQueueLimitExceeded = errors.New("queue limit exceeded")
+
+// Интерфейс для создания соединений к реализации очереди
+type QueueConnCreator interface {
+	Connect(ctx context.Context, queueID model.QueueID) (<-chan model.Message, func(context.Context, model.QueueID, model.Message) error, error)
+}
+
 type QueueConneсtion struct {
+	// канал для чтения из очереди
 	getMsgChan <-chan model.Message
-	putMsgFn   func(context.Context, model.QueueID, model.Message) error
+	// функция для отправки сообщения в очередь
+	putMsgFn func(context.Context, model.QueueID, model.Message) error
 }
 
 type QConnRegistry struct {
@@ -18,21 +28,21 @@ type QConnRegistry struct {
 
 	store        map[model.QueueID]*QueueConneсtion
 	queueLimit   int
-	maxQueueSize int
 	connCreator  QueueConnCreator
 }
 
-func NewQueueConnRegistry(cfg config.Config, creator QueueConnCreator) *QConnRegistry {
+// NewQueueConnRegistry создает и хранит соединение к очереди
+func NewQueueConnRegistry(cfg config.BrokerCfg, creator QueueConnCreator) *QConnRegistry {
 	return &QConnRegistry{
 		mx:           sync.RWMutex{},
 		store:        make(map[model.QueueID]*QueueConneсtion, cfg.QueueLimit),
 		queueLimit:   cfg.QueueLimit,
-		maxQueueSize: cfg.MaxQueueSize,
 		connCreator:  creator,
 	}
 }
 
-func (r *QConnRegistry) Create(ctx context.Context, queueID model.QueueID) (*QueueConneсtion, error) {
+// GetOrRegister получает или регистрирует соединение для очереди с идентификатором queueID
+func (r *QConnRegistry) GetOrRegister(ctx context.Context, queueID model.QueueID) (*QueueConneсtion, error) {
 	r.mx.RLock()
 
 	qconn, ok := r.store[queueID]
@@ -60,7 +70,7 @@ func (r *QConnRegistry) Create(ctx context.Context, queueID model.QueueID) (*Que
 
 	qconn = &QueueConneсtion{}
 
-	qconn.getMsgChan, qconn.putMsgFn, err = r.connCreator.Create(ctx, queueID, r.maxQueueSize)
+	qconn.getMsgChan, qconn.putMsgFn, err = r.connCreator.Connect(ctx, queueID)
 	if err != nil {
 		return nil, fmt.Errorf("can't connect to queue %s; err: %w", queueID, err)
 	}

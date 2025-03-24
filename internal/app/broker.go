@@ -23,7 +23,7 @@ type BrokerApp struct {
 	appCtxCancel context.CancelCauseFunc
 }
 
-func NewBrokerApp(cfg config.Config) (*BrokerApp, error) {
+func NewBrokerApp(cfg config.BrokerCfg) (*BrokerApp, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid app configuration: %w", err)
 	}
@@ -32,7 +32,7 @@ func NewBrokerApp(cfg config.Config) (*BrokerApp, error) {
 
 	app.appCtx, app.appCtxCancel = context.WithCancelCause(context.Background())
 
-	app.qRegistry = service.NewQueueConnRegistry(cfg, connector.NewChanQueueConnCreator())
+	app.qRegistry = service.NewQueueConnRegistry(cfg, connector.NewChanQueueConnector(cfg.MaxQueueSize))
 
 	app.brokerSvc = service.NewBrokerSvc(app.appCtx, cfg, app.qRegistry)
 
@@ -64,10 +64,9 @@ func (app *BrokerApp) Run() error {
 				return
 			}
 		}
-		
+
 		errSig <- nil
 	}()
-
 
 	signal.Notify(closeSig, syscall.SIGINT, syscall.SIGTERM)
 

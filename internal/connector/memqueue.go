@@ -3,17 +3,20 @@ package connector
 import (
 	"context"
 	"ebirukov/qbro/internal/model"
-	"ebirukov/qbro/internal/service"
 	"errors"
 )
 
-func NewChanQueueConnCreator() service.QueueConnCreator {
-	return QueueAdapter(NewQueueConn)
+type ChanQueueConnector struct {
+	size int
 }
 
-func NewQueueConn(ctx context.Context, queueID model.QueueID, size int) (
+func NewChanQueueConnector(size int) *ChanQueueConnector {
+	return &ChanQueueConnector{size: size}
+}
+
+func (c *ChanQueueConnector) Connect(ctx context.Context, queueID model.QueueID) (
 	<-chan model.Message, func(context.Context, model.QueueID, model.Message) error, error) {
-	queue := make(chan model.Message, size)
+	queue := make(chan model.Message, c.size)
 	
 	return queue, func(ctx context.Context, queueID model.QueueID, msg model.Message) error {
 		select {

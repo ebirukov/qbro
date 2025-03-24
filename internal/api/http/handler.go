@@ -15,13 +15,13 @@ type Broker interface {
 
 type BrokerHandler struct {
 	broker Broker
-	cfg config.Config
+	cfg    config.BrokerCfg
 }
 
-func NewBrokerHandler(cfg config.Config, broker Broker) *BrokerHandler {
+func NewBrokerHandler(cfg config.BrokerCfg, broker Broker) *BrokerHandler {
 	return &BrokerHandler{
 		broker: broker,
-		cfg: cfg,
+		cfg:    cfg,
 	}
 }
 

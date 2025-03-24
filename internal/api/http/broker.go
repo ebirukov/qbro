@@ -28,6 +28,12 @@ func (h *BrokerHandler) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := msg.Validate(); err != nil {
+		http.Error(w, fmt.Errorf("invalid message: %w", err).Error(), http.StatusBadRequest)
+
+		return
+	}
+
 	ctx := r.Context()
 
 	if err = h.broker.Put(ctx, model.QueueID(qID), model.Message(msg.Data)); err != nil {
