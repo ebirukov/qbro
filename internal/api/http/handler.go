@@ -2,8 +2,8 @@ package http
 
 import (
 	"context"
+	"ebirukov/qbro/internal/config"
 	"ebirukov/qbro/internal/model"
-	"ebirukov/qbro/internal/service"
 	"errors"
 	"net/http"
 )
@@ -15,10 +15,10 @@ type Broker interface {
 
 type BrokerHandler struct {
 	broker Broker
-	cfg model.Config
+	cfg config.Config
 }
 
-func NewBrokerHandler(cfg model.Config, broker Broker) *BrokerHandler {
+func NewBrokerHandler(cfg config.Config, broker Broker) *BrokerHandler {
 	return &BrokerHandler{
 		broker: broker,
 		cfg: cfg,
@@ -27,10 +27,8 @@ func NewBrokerHandler(cfg model.Config, broker Broker) *BrokerHandler {
 
 func translateError(err error) int {
 	switch {
-	case errors.Is(err, context.DeadlineExceeded),errors.Is(err, service.ErrQueueNotFound):
+	case errors.Is(err, context.DeadlineExceeded):
 		return http.StatusNotFound
-	case errors.Is(err, service.ErrTooManyRequest):
-		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}

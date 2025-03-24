@@ -2,33 +2,30 @@ package service
 
 import (
 	"context"
+	"ebirukov/qbro/internal/config"
 	"ebirukov/qbro/internal/model"
 	"fmt"
 )
-
-type Queue interface {
-	Put(ctx context.Context, msg model.Message) error
-	Get(ctx context.Context) (model.Message, error)
-}
 
 type QueueConnCreator interface {
 	Create(ctx context.Context, queueID model.QueueID, size int) (<-chan model.Message, func(context.Context, model.QueueID, model.Message) error, error)
 }
 
 type QueueRegistry interface {
-	Get(model.QueueID) (*QueueConnetion, bool)
-	Create(context.Context, model.QueueID) (*QueueConnetion, error)
+	Create(context.Context, model.QueueID) (*QueueConneсtion, error)
 }
 
 type BrokerSvc struct {
-	config        model.Config
+	config        config.Config
 	queueRegistry QueueRegistry
+	appCtx        context.Context
 }
 
-func NewBrokerSvc(cfg model.Config, registry QueueRegistry) *BrokerSvc {
+func NewBrokerSvc(appCtx context.Context, cfg config.Config, registry QueueRegistry) *BrokerSvc {
 	return &BrokerSvc{
 		config:        cfg,
 		queueRegistry: registry,
+		appCtx:        appCtx,
 	}
 }
 
@@ -46,14 +43,16 @@ func (b *BrokerSvc) Put(ctx context.Context, queueID model.QueueID, msg model.Me
 // Get получает сообщение из очереди с заданным идентификатором.
 // Возвращает ошибку если очереди не существует, истекло время ожидания на пустой очереди или переполнен буфер запросов.
 func (b *BrokerSvc) Get(ctx context.Context, queueID model.QueueID) (model.Message, error) {
-	qconn, ok := b.queueRegistry.Get(queueID)
-	if !ok {
-		return nil, fmt.Errorf("can't get message from queue %s; err: %w", queueID, ErrQueueNotFound)
+	qconn, err := b.queueRegistry.Create(ctx, queueID)
+	if err != nil {
+		return nil, fmt.Errorf("can't get message from queue %s; err: %w", queueID, err)
 	}
 
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-b.appCtx.Done():
+		return nil, b.appCtx.Err()
 	case msg := <-qconn.getMsgChan:
 		return msg, nil
 	}

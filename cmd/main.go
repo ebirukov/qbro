@@ -2,19 +2,32 @@ package main
 
 import (
 	broker "ebirukov/qbro/internal/app"
-	"ebirukov/qbro/internal/model"
+	"ebirukov/qbro/internal/config"
+	"flag"
+	"log"
 )
 
 func main() {
+	httpPort := flag.Int("http_port", 0, "http server port")
+	queueLimit := flag.Int("queues", 0, "maximum number of queues")
+	maxQueueSize := flag.Int("queue_size", 0, "maximum queue size")
+	defaultTimeout := flag.Duration("read_timeout", 0, "timeout for waiting data from queue")
 
-	cfg := model.Config{
-		QueueLimit: 1,
-		MaxQueueSize: 10,
-		DefaultTimeout: 30,
-		HttpPort: ":8080",
+	flag.Parse()
+
+	cfg := config.Config{
+		QueueLimit: *queueLimit,
+		MaxQueueSize: *maxQueueSize,
+		DefaultTimeout: *defaultTimeout,
+		HttpPort: *httpPort,
 	}
 	
-	qbro := broker.NewBrokerApp(cfg)
+	qbro, err := broker.NewBrokerApp(cfg)
+	if err != nil {
+		log.Fatalf("can't create app: %s", err)
+	}
 
-	qbro.Run()
+	if err := qbro.Run(); err != nil {
+		log.Fatalf("stop app with err: %s", err)
+	}
 }

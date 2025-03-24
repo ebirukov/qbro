@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"ebirukov/qbro/internal/config"
 	"ebirukov/qbro/internal/connector"
 	"ebirukov/qbro/internal/model"
 	"ebirukov/qbro/internal/service"
@@ -13,16 +14,16 @@ import (
 
 func Test_Lifecycle(t *testing.T) {
 	appCtx, cancelApp := context.WithCancelCause(context.Background())
-	config := model.Config{
+	config := config.Config{
 		QueueLimit:   1,
 		MaxQueueSize: 10,
 	}
 
-	reg := service.NewQueueConnRegistry(appCtx, config, connector.NewChanQueueConnCreator())
+	reg := service.NewQueueConnRegistry(config, connector.NewChanQueueConnCreator())
 
 	defer reg.Shutdown()
 
-	qbro := service.NewBrokerSvc(config, reg)
+	qbro := service.NewBrokerSvc(appCtx, config, reg)
 
 	ctx, cancel := context.WithTimeout(appCtx, time.Second)
 	defer cancel()

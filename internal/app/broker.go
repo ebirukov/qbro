@@ -2,12 +2,12 @@ package broker
 
 import (
 	"context"
-	"ebirukov/qbro/internal/connector"
 	httpApi "ebirukov/qbro/internal/api/http"
-	"ebirukov/qbro/internal/model"
+	"ebirukov/qbro/internal/config"
+	"ebirukov/qbro/internal/connector"
 	"ebirukov/qbro/internal/service"
 	"errors"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,50 +23,67 @@ type BrokerApp struct {
 	appCtxCancel context.CancelCauseFunc
 }
 
-func NewBrokerApp(cfg model.Config) *BrokerApp {
+func NewBrokerApp(cfg config.Config) (*BrokerApp, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid app configuration: %w", err)
+	}
+
 	app := &BrokerApp{}
 
 	app.appCtx, app.appCtxCancel = context.WithCancelCause(context.Background())
 
-	app.qRegistry = service.NewQueueConnRegistry(app.appCtx, cfg, connector.NewChanQueueConnCreator())
+	app.qRegistry = service.NewQueueConnRegistry(cfg, connector.NewChanQueueConnCreator())
 
-	app.brokerSvc = service.NewBrokerSvc(cfg, app.qRegistry)
+	app.brokerSvc = service.NewBrokerSvc(app.appCtx, cfg, app.qRegistry)
 
 	httpHandlers := httpApi.NewBrokerHandler(cfg, app.brokerSvc)
 	router := httpApi.RegisterRoutes(httpHandlers)
 
-	port := cfg.HttpPort
-	if port == "" {
-		port = ":8080"
-	}
-
 	app.httpServer = &http.Server{
-		Addr:    port,
+		Addr:    cfg.HttpAddr(),
 		Handler: router,
 	}
 
-	return app
+	return app, nil
 }
 
-func (app *BrokerApp) Run() {
+func (app *BrokerApp) Run() error {
+	closeSig := make(chan os.Signal, 1)
+	defer close(closeSig)
+
+	errSig := make(chan error)
+	defer close(errSig)
+
 	go func() {
 		err := app.httpServer.ListenAndServe()
 		if err != nil {
 			switch {
 			case errors.Is(err, http.ErrServerClosed):
 			default:
-				log.Fatal(err)
+				errSig <- err
+				return
 			}
 		}
+		
+		errSig <- nil
 	}()
 
-	closeSig := make(chan os.Signal, 1)
+
 	signal.Notify(closeSig, syscall.SIGINT, syscall.SIGTERM)
 
-	<-closeSig
+	var err error
 
+	select {
+	case <-closeSig:
+	case err = <-errSig:
+	}
+
+	// cancel all requests that read from queues
 	app.appCtxCancel(errors.New("app was stop"))
 
-	app.qRegistry.Shutdown()
-	app.httpServer.Shutdown(app.appCtx)
+	return errors.Join(
+		err,
+		app.qRegistry.Shutdown(),
+		app.httpServer.Shutdown(context.Background()),
+	)
 }

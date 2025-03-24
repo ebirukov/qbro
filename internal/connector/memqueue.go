@@ -3,7 +3,7 @@ package connector
 import (
 	"context"
 	"ebirukov/qbro/internal/model"
-	"ebirukov/qbro/internal/service"gir
+	"ebirukov/qbro/internal/service"
 	"errors"
 )
 

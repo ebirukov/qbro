@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -50,23 +49,27 @@ func (h *BrokerHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	timeoutParam := r.URL.Query().Get("timeout")
 
-	if timeoutParam == "" {
-		timeoutParam = strconv.Itoa(h.cfg.DefaultTimeout)
+	to := h.cfg.DefaultTimeout
+
+	if timeoutParam != "" {
+		var err error
+
+		to, err = time.ParseDuration(timeoutParam+"s")
+		if err != nil {
+			err := fmt.Errorf("can't parse timeout param: %w", err)
+	
+			http.Error(w, err.Error(), http.StatusBadRequest)
+	
+			return
+		}
 	}
 
-	to, err := time.ParseDuration(timeoutParam+"s")
-	if err != nil {
-		err := fmt.Errorf("can't parse timeout param: %w", err)
+	if to > 0 {
+		var cancel context.CancelFunc
 
-		http.Error(w, err.Error(), http.StatusBadRequest)
-
-		return
+		ctx, cancel = context.WithTimeout(ctx, to)
+		defer cancel()
 	}
-
-	var cancel context.CancelFunc
-
-	ctx, cancel = context.WithTimeout(ctx, to)
-	defer cancel()
 
 	msg, err := h.broker.Get(ctx, model.QueueID(qID))
 	if err != nil {
