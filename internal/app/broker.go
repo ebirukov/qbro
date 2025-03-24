@@ -2,7 +2,7 @@ package broker
 
 import (
 	"context"
-	"ebirukov/qbro/internal/adapter"
+	"ebirukov/qbro/internal/connector"
 	httpApi "ebirukov/qbro/internal/api/http"
 	"ebirukov/qbro/internal/model"
 	"ebirukov/qbro/internal/service"
@@ -16,10 +16,10 @@ import (
 
 type BrokerApp struct {
 	httpServer *http.Server
-	brokerSvc *service.BrokerSvc
-	qRegistry *service.QRegistry
+	brokerSvc  *service.BrokerSvc
+	qRegistry  *service.QConnRegistry
 
-	appCtx context.Context
+	appCtx       context.Context
 	appCtxCancel context.CancelCauseFunc
 }
 
@@ -28,7 +28,7 @@ func NewBrokerApp(cfg model.Config) *BrokerApp {
 
 	app.appCtx, app.appCtxCancel = context.WithCancelCause(context.Background())
 
-	app.qRegistry = service.NewQueueRegistry(app.appCtx, cfg, adapter.NewChanQueueCreator())
+	app.qRegistry = service.NewQueueConnRegistry(app.appCtx, cfg, connector.NewChanQueueConnCreator())
 
 	app.brokerSvc = service.NewBrokerSvc(cfg, app.qRegistry)
 
@@ -41,7 +41,7 @@ func NewBrokerApp(cfg model.Config) *BrokerApp {
 	}
 
 	app.httpServer = &http.Server{
-		Addr: port,
+		Addr:    port,
 		Handler: router,
 	}
 
@@ -63,7 +63,7 @@ func (app *BrokerApp) Run() {
 	closeSig := make(chan os.Signal, 1)
 	signal.Notify(closeSig, syscall.SIGINT, syscall.SIGTERM)
 
-	<- closeSig
+	<-closeSig
 
 	app.appCtxCancel(errors.New("app was stop"))
 

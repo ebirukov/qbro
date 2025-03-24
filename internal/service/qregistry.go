@@ -7,29 +7,34 @@ import (
 	"sync"
 )
 
-type QRegistry struct {
+type QueueConnetion struct {
+	getMsgChan <-chan model.Message
+	putMsgFn   func(context.Context, model.QueueID, model.Message) error
+}
+
+type QConnRegistry struct {
 	mx sync.RWMutex
 
-	store        map[model.QueueID]*FifoGetQueue
+	store        map[model.QueueID]*QueueConnetion
 	queueLimit   int
 	maxQueueSize int
-	creator      QueueCreator
+	connCreator  QueueConnCreator
 
 	appCtx context.Context
 }
 
-func NewQueueRegistry(appCtx context.Context, cfg model.Config, creator QueueCreator) *QRegistry {
-	return &QRegistry{
+func NewQueueConnRegistry(appCtx context.Context, cfg model.Config, creator QueueConnCreator) *QConnRegistry {
+	return &QConnRegistry{
 		mx:           sync.RWMutex{},
-		store:        make(map[model.QueueID]*FifoGetQueue, cfg.QueueLimit),
+		store:        make(map[model.QueueID]*QueueConnetion, cfg.QueueLimit),
 		queueLimit:   cfg.QueueLimit,
 		maxQueueSize: cfg.MaxQueueSize,
-		creator:      creator,
+		connCreator:  creator,
 		appCtx:       appCtx,
 	}
 }
 
-func (r *QRegistry) Get(queueID model.QueueID) (Queue, bool) {
+func (r *QConnRegistry) Get(queueID model.QueueID) (*QueueConnetion, bool) {
 	r.mx.RLock()
 	defer r.mx.RUnlock()
 
@@ -38,16 +43,16 @@ func (r *QRegistry) Get(queueID model.QueueID) (Queue, bool) {
 	return q, ok
 }
 
-func (r *QRegistry) Create(ctx context.Context, queueID model.QueueID) (Queue, error) {
+func (r *QConnRegistry) Create(ctx context.Context, queueID model.QueueID) (*QueueConnetion, error) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
-	q, ok := r.store[queueID]
+	qconn, ok := r.store[queueID]
 	if ok {
-		return q, nil
+		return qconn, nil
 	}
 
-	if r.creator == nil {
+	if r.connCreator == nil {
 		return nil, fmt.Errorf("can't create queue %s; err: %w", queueID, ErrUnsupportedOperation)
 	}
 
@@ -55,19 +60,21 @@ func (r *QRegistry) Create(ctx context.Context, queueID model.QueueID) (Queue, e
 		return nil, fmt.Errorf("can't create queue %s; err: %w", queueID, ErrQueueLimitExceeded)
 	}
 
-	queue, err := r.creator.Create(ctx, queueID, r.maxQueueSize)
+	qconn = &QueueConnetion{}
+
+	var err error
+
+	qconn.getMsgChan, qconn.putMsgFn, err = r.connCreator.Create(ctx, queueID, r.maxQueueSize)
 	if err != nil {
 		return nil, fmt.Errorf("can't create queue %s; err: %w", queueID, err)
 	}
 
-	q = NewFifoGetQueue(r.appCtx, queueID, queue, min(r.maxQueueSize, MaxPoolSize))
+	r.store[queueID] = qconn
 
-	r.store[queueID] = q
-
-	return q, nil
+	return qconn, nil
 }
 
-func (r *QRegistry) Shutdown() error {
+func (r *QConnRegistry) Shutdown() error {
 	r.mx.Lock()
 	defer r.mx.Unlock()
 
